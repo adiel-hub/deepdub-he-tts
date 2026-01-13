@@ -182,6 +182,9 @@ async def enable_hebrew_tts(
     if not server_url:
         # Get the base URL from the incoming request
         server_url = str(request.base_url).rstrip('/')
+        # Ensure https for production (Render proxy uses http internally)
+        if server_url.startswith("http://") and "localhost" not in server_url and "127.0.0.1" not in server_url:
+            server_url = server_url.replace("http://", "https://", 1)
 
     # Build TTS endpoint URL
     tts_url = f"{server_url}/to-speech"
