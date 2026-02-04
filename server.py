@@ -155,7 +155,13 @@ async def to_speech(request: Request):
 
 
 @app.post("/to-speech/elevenlabs")
-async def to_speech_elevenlabs(request: Request):
+async def to_speech_elevenlabs(
+    request: Request,
+    speed: Optional[float] = Query(None, description="Voice speed (0.1-4.0, default from env or 1.3)"),
+    stability: Optional[float] = Query(None, description="Voice stability (0-1, default from env or 0.5)"),
+    similarity: Optional[float] = Query(None, description="Similarity boost (0-1, default from env or 0.75)"),
+    voice_id: Optional[str] = Query(None, description="Override voice ID"),
+):
     """Hebrew TTS using ElevenLabs v3 model"""
     t0 = time.perf_counter()
     payload = await request.json()
@@ -164,12 +170,13 @@ async def to_speech_elevenlabs(request: Request):
     if not text:
         return Response(status_code=200)
 
-    # Get voice settings from env or use defaults
-    speed = float(os.getenv("ELEVENLABS_SPEED", "1.3"))
-    stability = float(os.getenv("ELEVENLABS_STABILITY", "0.5"))
-    similarity_boost = float(os.getenv("ELEVENLABS_SIMILARITY", "0.75"))
+    # Get voice settings from query params, env, or defaults
+    final_speed = speed if speed is not None else float(os.getenv("ELEVENLABS_SPEED", "1.3"))
+    final_stability = stability if stability is not None else float(os.getenv("ELEVENLABS_STABILITY", "0.5"))
+    final_similarity = similarity if similarity is not None else float(os.getenv("ELEVENLABS_SIMILARITY", "0.75"))
+    final_voice_id = voice_id if voice_id else elevenlabs_voice_id
 
-    print(f"\n📨 /to-speech/elevenlabs | text_len={len(text)} | speed={speed}")
+    print(f"\n📨 /to-speech/elevenlabs | text_len={len(text)} | speed={final_speed} | voice={final_voice_id}")
 
     async def stream_tts():
         first_chunk = True
@@ -177,15 +184,15 @@ async def to_speech_elevenlabs(request: Request):
         async with httpx.AsyncClient() as client:
             async with client.stream(
                 "POST",
-                f"{ELEVENLABS_API_URL}/{elevenlabs_voice_id}/stream",
+                f"{ELEVENLABS_API_URL}/{final_voice_id}/stream",
                 headers={"xi-api-key": elevenlabs_api_key},
                 json={
                     "text": text,
                     "model_id": "eleven_v3",
                     "voice_settings": {
-                        "stability": stability,
-                        "similarity_boost": similarity_boost,
-                        "speed": speed
+                        "stability": final_stability,
+                        "similarity_boost": final_similarity,
+                        "speed": final_speed
                     }
                 },
                 params={"output_format": "pcm_16000"},
