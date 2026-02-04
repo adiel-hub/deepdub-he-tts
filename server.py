@@ -23,6 +23,11 @@ vapi_api_key = os.getenv("VAPI_API_KEY")
 DEEPDUB_WS_URL = "wss://wsapi.deepdub.ai/open"
 VAPI_BASE_URL = "https://api.vapi.ai"
 
+# ElevenLabs configuration
+ELEVENLABS_API_URL = "https://api.elevenlabs.io/v1/text-to-speech"
+elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY")
+elevenlabs_voice_id = os.getenv("ELEVENLABS_VOICE_ID", "21m00Tcm4TlvDq8ikWAM")
+
 PORT = int(os.getenv("PORT", 4000))  
 
 app = FastAPI()
@@ -149,6 +154,50 @@ async def to_speech(request: Request):
     )
 
 
+@app.post("/to-speech/elevenlabs")
+async def to_speech_elevenlabs(request: Request):
+    """Hebrew TTS using ElevenLabs v3 model"""
+    t0 = time.perf_counter()
+    payload = await request.json()
+    text = payload.get("text") or payload.get("message", {}).get("text") or payload.get("message", {}).get("content")
+
+    if not text:
+        return Response(status_code=200)
+
+    print(f"\n📨 /to-speech/elevenlabs | text_len={len(text)}")
+
+    async def stream_tts():
+        first_chunk = True
+        total_bytes = 0
+        async with httpx.AsyncClient() as client:
+            async with client.stream(
+                "POST",
+                f"{ELEVENLABS_API_URL}/{elevenlabs_voice_id}/stream",
+                headers={"xi-api-key": elevenlabs_api_key},
+                json={"text": text, "model_id": "eleven_v3"},
+                params={"output_format": "pcm_16000"},
+                timeout=60.0
+            ) as response:
+                if response.status_code != 200:
+                    error_body = await response.aread()
+                    print(f"❌ ElevenLabs error: {response.status_code} - {error_body.decode()}")
+                    return
+                async for chunk in response.aiter_bytes():
+                    if first_chunk:
+                        ttfa = (time.perf_counter() - t0) * 1000
+                        print(f"⚡ TTFA={ttfa:.1f}ms | first_chunk_size={len(chunk)} bytes")
+                        first_chunk = False
+                    total_bytes += len(chunk)
+                    yield chunk
+        print(f"🏁 ElevenLabs stream done | total_bytes={total_bytes}")
+
+    return StreamingResponse(
+        stream_tts(),
+        media_type="application/octet-stream",
+        headers={"Cache-Control": "no-store"},
+    )
+
+
 @app.get("/health")
 async def health():
     return {"status": "ok"}
@@ -158,6 +207,10 @@ async def health():
 async def enable_hebrew_tts(
     assistant_id: str,
     request: Request,
+    provider: str = Query(
+        "deepdub",
+        description="TTS provider: 'deepdub' or 'elevenlabs'"
+    ),
     vapi_key: Optional[str] = Query(
         None,
         description="VAPI API key. If not provided, uses server's VAPI_API_KEY env variable."
@@ -178,6 +231,13 @@ async def enable_hebrew_tts(
             detail="VAPI API key required. Provide 'vapi_key' query parameter or configure VAPI_API_KEY on server."
         )
 
+    # Validate provider
+    if provider not in ["deepdub", "elevenlabs"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid provider. Use 'deepdub' or 'elevenlabs'."
+        )
+
     # Auto-detect server URL from request if not provided
     if not server_url:
         # Get the base URL from the incoming request
@@ -186,10 +246,13 @@ async def enable_hebrew_tts(
         if server_url.startswith("http://") and "localhost" not in server_url and "127.0.0.1" not in server_url:
             server_url = server_url.replace("http://", "https://", 1)
 
-    # Build TTS endpoint URL
-    tts_url = f"{server_url}/to-speech"
+    # Build TTS endpoint URL based on provider
+    if provider == "elevenlabs":
+        tts_url = f"{server_url}/to-speech/elevenlabs"
+    else:
+        tts_url = f"{server_url}/to-speech"
 
-    # Voice configuration for custom Deepdub TTS
+    # Voice configuration for custom TTS
     voice_config = {
         "voice": {
             "provider": "custom-voice",
@@ -202,7 +265,7 @@ async def enable_hebrew_tts(
         }
     }
 
-    print(f"📝 Updating assistant {assistant_id} with Hebrew TTS: {tts_url}")
+    print(f"📝 Updating assistant {assistant_id} with Hebrew TTS ({provider}): {tts_url}")
 
     async with httpx.AsyncClient() as client:
         try:
@@ -247,7 +310,8 @@ async def enable_hebrew_tts(
                 "success": True,
                 "assistant_id": assistant_id,
                 "assistant_name": assistant_name,
-                "message": f"Assistant '{assistant_name}' updated to use Deepdub Hebrew TTS at {tts_url}"
+                "provider": provider,
+                "message": f"Assistant '{assistant_name}' updated to use {provider.title()} Hebrew TTS at {tts_url}"
             }
 
         except httpx.TimeoutException:
