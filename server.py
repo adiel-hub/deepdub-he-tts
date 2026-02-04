@@ -239,6 +239,14 @@ async def enable_hebrew_tts(
         None,
         description="Custom TTS server URL. If not provided, auto-detects from request."
     ),
+    speed: Optional[float] = Query(
+        None,
+        description="Voice speed for ElevenLabs (0.1-4.0)"
+    ),
+    voice_id: Optional[str] = Query(
+        None,
+        description="Override ElevenLabs voice ID"
+    ),
 ):
     """Enable Hebrew TTS for a VAPI assistant."""
 
@@ -269,6 +277,14 @@ async def enable_hebrew_tts(
     # Build TTS endpoint URL based on provider
     if provider == "elevenlabs":
         tts_url = f"{server_url}/to-speech/elevenlabs"
+        # Add query params for ElevenLabs settings
+        params = []
+        if speed is not None:
+            params.append(f"speed={speed}")
+        if voice_id is not None:
+            params.append(f"voice_id={voice_id}")
+        if params:
+            tts_url += "?" + "&".join(params)
     else:
         tts_url = f"{server_url}/to-speech"
 
