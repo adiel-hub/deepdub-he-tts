@@ -164,7 +164,12 @@ async def to_speech_elevenlabs(request: Request):
     if not text:
         return Response(status_code=200)
 
-    print(f"\n📨 /to-speech/elevenlabs | text_len={len(text)}")
+    # Get voice settings from env or use defaults
+    speed = float(os.getenv("ELEVENLABS_SPEED", "1.3"))
+    stability = float(os.getenv("ELEVENLABS_STABILITY", "0.5"))
+    similarity_boost = float(os.getenv("ELEVENLABS_SIMILARITY", "0.75"))
+
+    print(f"\n📨 /to-speech/elevenlabs | text_len={len(text)} | speed={speed}")
 
     async def stream_tts():
         first_chunk = True
@@ -174,7 +179,15 @@ async def to_speech_elevenlabs(request: Request):
                 "POST",
                 f"{ELEVENLABS_API_URL}/{elevenlabs_voice_id}/stream",
                 headers={"xi-api-key": elevenlabs_api_key},
-                json={"text": text, "model_id": "eleven_v3"},
+                json={
+                    "text": text,
+                    "model_id": "eleven_v3",
+                    "voice_settings": {
+                        "stability": stability,
+                        "similarity_boost": similarity_boost,
+                        "speed": speed
+                    }
+                },
                 params={"output_format": "pcm_16000"},
                 timeout=60.0
             ) as response:
