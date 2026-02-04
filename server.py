@@ -171,7 +171,7 @@ async def to_speech_elevenlabs(
         return Response(status_code=200)
 
     # Get voice settings from query params, env, or defaults
-    final_speed = speed if speed is not None else float(os.getenv("ELEVENLABS_SPEED", "1.3"))
+    final_speed = speed if speed is not None else float(os.getenv("ELEVENLABS_SPEED", "1.0"))
     final_stability = stability if stability is not None else float(os.getenv("ELEVENLABS_STABILITY", "0.5"))
     final_similarity = similarity if similarity is not None else float(os.getenv("ELEVENLABS_SIMILARITY", "0.75"))
     final_voice_id = voice_id if voice_id else elevenlabs_voice_id
