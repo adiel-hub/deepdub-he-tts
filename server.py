@@ -26,7 +26,7 @@ VAPI_BASE_URL = "https://api.vapi.ai"
 # ElevenLabs configuration
 ELEVENLABS_API_URL = "https://api.elevenlabs.io/v1/text-to-speech"
 elevenlabs_api_key = os.getenv("ELEVENLABS_API_KEY")
-elevenlabs_voice_id = os.getenv("ELEVENLABS_VOICE_ID", "S9GPGBaMND8XWwwzxQXp")
+elevenlabs_voice_id = os.getenv("ELEVENLABS_VOICE_ID", "dXtC3XhB9GtPusIpNtQx")
 
 PORT = int(os.getenv("PORT", 4000))  
 
